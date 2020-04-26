@@ -23,6 +23,7 @@ pub type CompilationResultFuture = dyn Future<Output = JsonResult>;
 pub struct CompiledModule {
   pub code: String,
   pub name: String,
+  pub real_file: std::path::PathBuf
 }
 
 pub type CompiledModuleFuture =

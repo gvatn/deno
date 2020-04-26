@@ -118,6 +118,7 @@ impl EsIsolate {
     main: bool,
     name: &str,
     source: &str,
+    real_file: impl AsRef<std::path::Path>
   ) -> Result<ModuleId, ErrBox> {
     let core_isolate = &mut self.core_isolate;
     let v8_isolate = core_isolate.v8_isolate.as_mut().unwrap();
@@ -130,7 +131,9 @@ impl EsIsolate {
     let mut cs = v8::ContextScope::new(scope, context);
     let scope = cs.enter();
 
-    let name_str = v8::String::new(scope, name).unwrap();
+    //println!("{} - {:?}:\n{}", name, real_file.as_ref(), source);
+    //let name_str = v8::String::new(scope, name).unwrap();
+    let name_str = v8::String::new(scope, &real_file.as_ref().as_os_str().to_string_lossy()).unwrap();
     let source_str = v8::String::new(scope, source).unwrap();
 
     let origin = bindings::module_origin(scope, name_str);
@@ -420,6 +423,7 @@ impl EsIsolate {
       code,
       module_url_specified,
       module_url_found,
+      real_file
     } = info;
 
     let is_main =
@@ -452,7 +456,7 @@ impl EsIsolate {
         id
       }
       // Module not registered yet, do it now.
-      None => self.mod_new(is_main, &module_url_found, &code)?,
+      None => self.mod_new(is_main, &module_url_found, &code, &real_file)?,
     };
 
     // Now we must iterate over all imports of the module and load them.
@@ -617,6 +621,7 @@ pub mod tests {
         let control = new Uint8Array([42]);
         Deno.core.send(1, control);
       "#,
+      &std::path::PathBuf::from("./a.js")
       )
       .unwrap();
     assert_eq!(dispatch_count.load(Ordering::Relaxed), 0);
@@ -627,7 +632,7 @@ pub mod tests {
       Some(&vec![ModuleSpecifier::resolve_url("file:///b.js").unwrap()])
     );
     let mod_b = isolate
-      .mod_new(false, "file:///b.js", "export function b() { return 'b' }")
+      .mod_new(false, "file:///b.js", "export function b() { return 'b' }", &std::path::PathBuf::from("./b.js"))
       .unwrap();
     let imports = isolate.modules.get_children(mod_b).unwrap();
     assert_eq!(imports.len(), 0);
@@ -825,6 +830,7 @@ pub mod tests {
           module_url_specified: specifier.to_string(),
           module_url_found: specifier.to_string(),
           code: "export function b() { return 'b' }".to_owned(),
+          real_file: "./b.js".into()
         };
         async move { Ok(info) }.boxed()
       }

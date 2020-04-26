@@ -102,6 +102,8 @@ impl DiskCache {
       None => base.with_extension(extension),
       Some(ext) => {
         let original_extension = OsStr::to_str(ext).unwrap();
+        // todo: Just base.with_extension(extension) should map better with tsc output,
+        // are there other edge cases?
         let final_extension = format!("{}.{}", original_extension, extension);
         base.with_extension(final_extension)
       }

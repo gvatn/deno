@@ -16,6 +16,7 @@ impl JsCompiler {
         .unwrap()
         .to_string(),
       name: source_file.url.to_string(),
+      real_file: source_file.filename
     })
   }
 }

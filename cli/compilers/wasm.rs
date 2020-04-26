@@ -104,6 +104,7 @@ impl WasmCompiler {
     let module = CompiledModule {
       code,
       name: url.to_string(),
+      real_file: source_file.filename
     };
     {
       cache_.lock().unwrap().insert(url.clone(), module.clone());

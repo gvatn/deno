@@ -421,6 +421,7 @@ impl TsCompiler {
         .unwrap()
         .to_string(),
       name: module_url.to_string(),
+      real_file: compiled_source_file.filename
     };
 
     Ok(compiled_module)

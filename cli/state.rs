@@ -283,6 +283,7 @@ impl ModuleLoader for State {
         code: compiled_module.code,
         module_url_specified,
         module_url_found: compiled_module.name,
+        real_file: compiled_module.real_file
       })
     };
 

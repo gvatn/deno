@@ -39,6 +39,7 @@ pub struct ModuleSource {
   pub code: String,
   pub module_url_specified: String,
   pub module_url_found: String,
+  pub real_file: std::path::PathBuf
 }
 
 pub type ModuleSourceFuture = dyn Future<Output = Result<ModuleSource, ErrBox>>;
@@ -162,6 +163,10 @@ impl RecursiveModuleLoad {
           code: code.to_owned(),
           module_url_specified: module_specifier.to_string(),
           module_url_found: module_specifier.to_string(),
+          // todo: In this context, I don't see the compiled file,
+          // possibly it is in module_url_found? Haven't figured out the flow here.
+          // Or real_file should be an option?
+          real_file: std::path::PathBuf::from("./todo__main_with_code.js")
         })
         .boxed()
       }
@@ -583,6 +588,8 @@ mod tests {
           code: src.0.to_owned(),
           module_url_specified: inner.url.clone(),
           module_url_found: src.1.to_owned(),
+          // todo: Not accurate fwiw
+          real_file: std::path::PathBuf::from("./never_ready_or_slow.js")
         })),
         None => Poll::Ready(Err(MockError::LoadErr.into())),
       }

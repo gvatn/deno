@@ -45,6 +45,7 @@ impl JsonCompiler {
     Ok(CompiledModule {
       code,
       name: source_file.url.to_string(),
+      real_file: source_file.filename.clone()
     })
   }
 }
