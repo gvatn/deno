@@ -1,5 +1,4 @@
 use crate::fs as deno_fs;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::Component;
 use std::path::Path;
@@ -98,6 +97,8 @@ impl DiskCache {
   ) -> PathBuf {
     let base = self.get_cache_filename(url);
 
+    return base.with_extension(extension);
+    /*
     match base.extension() {
       None => base.with_extension(extension),
       Some(ext) => {
@@ -107,7 +108,7 @@ impl DiskCache {
         let final_extension = format!("{}.{}", original_extension, extension);
         base.with_extension(final_extension)
       }
-    }
+    }*/
   }
 
   pub fn get(&self, filename: &Path) -> std::io::Result<Vec<u8>> {

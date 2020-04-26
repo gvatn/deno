@@ -133,7 +133,7 @@ impl EsIsolate {
 
     //println!("{} - {:?}:\n{}", name, real_file.as_ref(), source);
     //let name_str = v8::String::new(scope, name).unwrap();
-    let name_str = v8::String::new(scope, &real_file.as_ref().as_os_str().to_string_lossy()).unwrap();
+    let name_str = v8::String::new(scope, &format!("file://{}", &real_file.as_ref().as_os_str().to_string_lossy())).unwrap();
     let source_str = v8::String::new(scope, source).unwrap();
 
     let origin = bindings::module_origin(scope, name_str);

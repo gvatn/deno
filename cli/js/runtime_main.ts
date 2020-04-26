@@ -113,6 +113,13 @@ export function bootstrapMainRuntime(): void {
   Object.freeze(globalThis.Deno.core.sharedQueue);
   setSignals();
 
+  /*
+  Object.defineProperty(globalThis, 'process', {
+    pid: s.pid,
+    version: 'v12.16.2',
+    arch: s.arch
+  } as any);*/
+
   log("cwd", s.cwd);
   log("args", Deno.args);
 

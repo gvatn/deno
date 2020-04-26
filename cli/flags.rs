@@ -1071,7 +1071,12 @@ fn inspect_args<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
 }
 
 fn inspect_arg_validate(val: String) -> Result<(), String> {
-  match val.parse::<SocketAddr>() {
+  let val_ = if val.chars().all(char::is_numeric) {
+    format!("127.0.0.1:{}", val)
+  } else {
+    val
+  };
+  match val_.parse::<SocketAddr>() {
     Ok(_) => Ok(()),
     Err(e) => Err(e.to_string()),
   }
@@ -1090,7 +1095,12 @@ fn inspect_arg_parse(flags: &mut Flags, matches: &clap::ArgMatches) {
   };
   flags.inspect_brk = if matches.is_present("inspect-brk") {
     if let Some(host) = matches.value_of("inspect-brk") {
-      Some(host.parse().unwrap())
+      // Default to 127.0.0.1 if assumed port is given
+      if host.chars().all(char::is_numeric) {
+        Some(format!("127.0.0.1:{}", host).parse().unwrap())
+      } else {
+        Some(host.parse().unwrap())
+      }
     } else {
       Some(default())
     }
