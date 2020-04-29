@@ -1,9 +1,7 @@
-const { cwd, chdir, makeTempDir, mkdir, open, symlink } = Deno;
+const { cwd, chdir, makeTempDir, mkdir, create, symlink } = Deno;
 const { remove } = Deno;
 import { walk, walkSync, WalkOptions, WalkEntry } from "./walk.ts";
 import { assert, assertEquals, assertThrowsAsync } from "../testing/asserts.ts";
-
-const isWindows = Deno.build.os == "win";
 
 export function testWalk(
   setup: (arg0: string) => void | Promise<void>,
@@ -46,7 +44,7 @@ export async function walkArray(
 }
 
 export async function touch(path: string): Promise<void> {
-  const f = await open(path, "w");
+  const f = await create(path);
   f.close();
 }
 
@@ -254,13 +252,13 @@ testWalk(
     try {
       await symlink(d + "/b", d + "/a/bb");
     } catch (err) {
-      assert(isWindows);
+      assert(Deno.build.os == "windows");
       assertEquals(err.message, "Not implemented");
     }
   },
   async function symlink(): Promise<void> {
     // symlink is not yet implemented on Windows.
-    if (isWindows) {
+    if (Deno.build.os == "windows") {
       return;
     }
 

@@ -390,7 +390,7 @@ mod tests {
       startup_data::deno_isolate_init(),
       state.clone(),
     );
-    worker.execute("bootstrapMainRuntime()").unwrap();
+    worker.execute("bootstrap.mainRuntime()").unwrap();
     let result = worker.execute_module(&module_specifier).await;
     if let Err(err) = result {
       eprintln!("execute_mod err {:?}", err);
@@ -412,7 +412,7 @@ mod tests {
       startup_data::deno_isolate_init(),
       state,
     );
-    worker.execute("bootstrapMainRuntime()").unwrap();
+    worker.execute("bootstrap.mainRuntime()").unwrap();
     worker
   }
 

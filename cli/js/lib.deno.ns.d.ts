@@ -16,13 +16,18 @@ declare namespace Deno {
     fn: () => void | Promise<void>;
     name: string;
     ignore?: boolean;
-    disableOpSanitizer?: boolean;
-    disableResourceSanitizer?: boolean;
+    /** Check that the number of async completed ops after the test is the same
+     * as number of dispatched ops. Defaults to true.*/
+    sanitizeOps?: boolean;
+    /** Ensure the test case does not "leak" resources - ie. the resource table
+     * after the test has exactly the same contents as before the test. Defaults
+     * to true. */
+    sanitizeResources?: boolean;
   }
 
   /** Register a test which will be run when `deno test` is used on the command
-   * line and the containing module looks like a test module, or explicitly
-   * when `Deno.runTests` is used.  `fn` can be async if required.
+   * line and the containing module looks like a test module.
+   * `fn` can be async if required.
    *
    *          import {assert, fail, assertEquals} from "https://deno.land/std/testing/asserts.ts";
    *
@@ -35,7 +40,7 @@ declare namespace Deno {
    *
    *          Deno.test({
    *            name: "example ignored test",
-   *            ignore: Deno.build.os === "win"
+   *            ignore: Deno.build.os === "windows"
    *            fn(): void {
    *              // This test is ignored only on Windows machines
    *            },
@@ -53,26 +58,8 @@ declare namespace Deno {
   export function test(t: TestDefinition): void;
 
   /** Register a test which will be run when `deno test` is used on the command
-   * line and the containing module looks like a test module, or explicitly
-   * when `Deno.runTests` is used
-   *
-   *        import {assert, fail, assertEquals} from "https://deno.land/std/testing/asserts.ts";
-   *
-   *        Deno.test(function myTestFunction():void {
-   *          assertEquals("hello", "hello");
-   *        });
-   *
-   *        Deno.test(async function myAsyncTestFunction():Promise<void> {
-   *          const decoder = new TextDecoder("utf-8");
-   *          const data = await Deno.readFile("hello_world.txt");
-   *          assertEquals(decoder.decode(data), "Hello world")
-   *        });
-   **/
-  export function test(fn: () => void | Promise<void>): void;
-
-  /** Register a test which will be run when `deno test` is used on the command
-   * line and the containing module looks like a test module, or explicitly
-   * when `Deno.runTests` is used
+   * line and the containing module looks like a test module.
+   * `fn` can be async if required.
    *
    *        import {assert, fail, assertEquals} from "https://deno.land/std/testing/asserts.ts";
    *
@@ -88,72 +75,6 @@ declare namespace Deno {
    * */
   export function test(name: string, fn: () => void | Promise<void>): void;
 
-  export interface TestMessage {
-    start?: {
-      tests: TestDefinition[];
-    };
-    testStart?: {
-      [P in keyof TestDefinition]: TestDefinition[P];
-    };
-    testEnd?: {
-      name: string;
-      status: "passed" | "failed" | "ignored";
-      duration: number;
-      error?: Error;
-    };
-    end?: {
-      filtered: number;
-      ignored: number;
-      measured: number;
-      passed: number;
-      failed: number;
-      duration: number;
-      results: Array<TestMessage["testEnd"] & {}>;
-    };
-  }
-
-  export interface RunTestsOptions {
-    /** If `true`, Deno will exit with status code 1 if there was
-     * test failure. Defaults to `true`. */
-    exitOnFail?: boolean;
-    /** If `true`, Deno will exit upon first test failure. Defaults to `false`. */
-    failFast?: boolean;
-    /** String or RegExp used to filter test to run. Only test with names
-     * matching provided `String` or `RegExp` will be run. */
-    filter?: string | RegExp;
-    /** String or RegExp used to skip tests to run. Tests with names
-     * matching provided `String` or `RegExp` will not be run. */
-    skip?: string | RegExp;
-    /** Disable logging of the results. Defaults to `false`. */
-    disableLog?: boolean;
-    /** If true, report results to the console as is done for `deno test`. Defaults to `true`. */
-    reportToConsole?: boolean;
-    /** Called for each message received from the test run. */
-    onMessage?: (message: TestMessage) => void | Promise<void>;
-  }
-
-  /** Run any tests which have been registered via `Deno.test()`. Always resolves
-   * asynchronously.
-   *
-   *        // Register test
-   *        Deno.test({
-   *          name: "example test",
-   *          fn(): void {
-   *            assertEquals("world", "world");
-   *            assertEquals({ hello: "world" }, { hello: "world" });
-   *          },
-   *        });
-   *
-   *        // Run tests
-   *        const runInfo = await Deno.runTests();
-   *        console.log(runInfo.duration);  // all tests duration, e.g. "5" (in ms)
-   *        console.log(runInfo.stats.passed);  // e.g. 1
-   *        console.log(runInfo.results[0].name);  // e.g. "example test"
-   */
-  export function runTests(
-    opts?: RunTestsOptions
-  ): Promise<TestMessage["end"]> & {};
-
   /** Returns an array containing the 1, 5, and 15 minute load averages. The
    * load average is a measure of CPU and IO utilization of the last one, five,
    * and 15 minute periods expressed as a fractional number.  Zero means there
@@ -163,6 +84,9 @@ declare namespace Deno {
    *       console.log(Deno.loadavg());  // e.g. [ 0.71, 0.44, 0.44 ]
    *
    * Requires `allow-env` permission.
+   *
+   * **Unstable**  There are questions around which permission this needs. And
+   * maybe should be renamed (loadAverage?)
    */
   export function loadavg(): number[];
 
@@ -179,6 +103,9 @@ declare namespace Deno {
    *       console.log(Deno.osRelease());
    *
    * Requires `allow-env` permission.
+   *
+   * **Unstable** new API maybe move to Deno.build or Deno.versions? Depends on
+   * sys-info, which we don't necessarally want to depend on.
    */
   export function osRelease(): string;
 
@@ -405,9 +332,6 @@ declare namespace Deno {
   export function cwd(): string;
 
   /**
-   * **UNSTABLE**: Currently under evaluation to decide if explicit permission is
-   * required to change the current working directory.
-   *
    * Change the current working directory to the specified path.
    *
    *       Deno.chdir("/home/userA");
@@ -417,6 +341,8 @@ declare namespace Deno {
    * Throws `Deno.errors.NotFound` if directory not found.
    * Throws `Deno.errors.PermissionDenied` if the user does not have access
    * rights
+   *
+   * Requires --allow-write.
    */
   export function chdir(directory: string): void;
 
@@ -435,15 +361,10 @@ declare namespace Deno {
    */
   export function umask(mask?: number): number;
 
-  /** **UNSTABLE**: might move to `Deno.symbols`. */
-  export const EOF: unique symbol;
-  export type EOF = typeof EOF;
-
-  /** **UNSTABLE**: might remove `"SEEK_"` prefix. Might not use all-caps. */
   export enum SeekMode {
-    SEEK_START = 0,
-    SEEK_CURRENT = 1,
-    SEEK_END = 2,
+    Start = 0,
+    Current = 1,
+    End = 2,
   }
 
   export interface Reader {
@@ -454,23 +375,24 @@ declare namespace Deno {
      * available but not `p.byteLength` bytes, `read()` conventionally resolves
      * to what is available instead of waiting for more.
      *
-     * When `read()` encounters end-of-file condition, it resolves to
-     * `Deno.EOF` symbol.
+     * When `read()` encounters end-of-file condition, it resolves to EOF
+     * (`null`).
      *
      * When `read()` encounters an error, it rejects with an error.
      *
      * Callers should always process the `n` > `0` bytes returned before
-     * considering the `EOF`. Doing so correctly handles I/O errors that happen
-     * after reading some bytes and also both of the allowed EOF behaviors.
+     * considering the EOF (`null`). Doing so correctly handles I/O errors that
+     * happen after reading some bytes and also both of the allowed EOF
+     * behaviors.
      *
      * Implementations should not retain a reference to `p`.
      *
      * Use Deno.iter() to turn a Reader into an AsyncIterator.
      */
-    read(p: Uint8Array): Promise<number | EOF>;
+    read(p: Uint8Array): Promise<number | null>;
   }
 
-  export interface SyncReader {
+  export interface ReaderSync {
     /** Reads up to `p.byteLength` bytes into `p`. It resolves to the number
      * of bytes read (`0` < `n` <= `p.byteLength`) and rejects if any error
      * encountered. Even if `read()` returns `n` < `p.byteLength`, it may use
@@ -478,20 +400,20 @@ declare namespace Deno {
      * but not `p.byteLength` bytes, `read()` conventionally returns what is
      * available instead of waiting for more.
      *
-     * When `readSync()` encounters end-of-file condition, it returns `Deno.EOF`
-     * symbol.
+     * When `readSync()` encounters end-of-file condition, it returns EOF
+     * (`null`).
      *
      * When `readSync()` encounters an error, it throws with an error.
      *
      * Callers should always process the `n` > `0` bytes returned before
-     * considering the `EOF`. Doing so correctly handles I/O errors that happen
+     * considering the EOF (`null`). Doing so correctly handles I/O errors that happen
      * after reading some bytes and also both of the allowed EOF behaviors.
      *
      * Implementations should not retain a reference to `p`.
      *
-     * Use Deno.iterSync() to turn a SyncReader into an Iterator.
+     * Use Deno.iterSync() to turn a ReaderSync into an Iterator.
      */
-    readSync(p: Uint8Array): number | EOF;
+    readSync(p: Uint8Array): number | null;
   }
 
   export interface Writer {
@@ -507,7 +429,7 @@ declare namespace Deno {
     write(p: Uint8Array): Promise<number>;
   }
 
-  export interface SyncWriter {
+  export interface WriterSync {
     /** Writes `p.byteLength` bytes from `p` to the underlying data
      * stream. It returns the number of bytes written from `p` (`0` <= `n`
      * <= `p.byteLength`) and any error encountered that caused the write to
@@ -526,9 +448,9 @@ declare namespace Deno {
 
   export interface Seeker {
     /** Seek sets the offset for the next `read()` or `write()` to offset,
-     * interpreted according to `whence`: `SEEK_START` means relative to the
-     * start of the file, `SEEK_CURRENT` means relative to the current offset,
-     * and `SEEK_END` means relative to the end. Seek resolves to the new offset
+     * interpreted according to `whence`: `Start` means relative to the
+     * start of the file, `Current` means relative to the current offset,
+     * and `End` means relative to the end. Seek resolves to the new offset
      * relative to the start of the file.
      *
      * Seeking to an offset before the start of the file is an error. Seeking to
@@ -539,11 +461,11 @@ declare namespace Deno {
     seek(offset: number, whence: SeekMode): Promise<number>;
   }
 
-  export interface SyncSeeker {
+  export interface SeekerSync {
     /** Seek sets the offset for the next `readSync()` or `writeSync()` to
-     * offset, interpreted according to `whence`: `SEEK_START` means relative
-     * to the start of the file, `SEEK_CURRENT` means relative to the current
-     * offset, and `SEEK_END` means relative to the end.
+     * offset, interpreted according to `whence`: `Start` means relative
+     * to the start of the file, `Current` means relative to the current
+     * offset, and `End` means relative to the end.
      *
      * Seeking to an offset before the start of the file is an error. Seeking to
      * any positive offset is legal, but the behavior of subsequent I/O
@@ -552,84 +474,89 @@ declare namespace Deno {
     seekSync(offset: number, whence: SeekMode): number;
   }
 
-  export interface ReadCloser extends Reader, Closer {}
-  export interface WriteCloser extends Writer, Closer {}
-  export interface ReadSeeker extends Reader, Seeker {}
-  export interface WriteSeeker extends Writer, Seeker {}
-  export interface ReadWriteCloser extends Reader, Writer, Closer {}
-  export interface ReadWriteSeeker extends Reader, Writer, Seeker {}
-
-  /** Copies from `src` to `dst` until either `EOF` is reached on `src` or an
-   * error occurs. It resolves to the number of bytes copied or rejects with
+  /** Copies from `src` to `dst` until either EOF (`null`) is read from `src` or
+   * an error occurs. It resolves to the number of bytes copied or rejects with
    * the first error encountered while copying.
    *
    *       const source = await Deno.open("my_file.txt");
    *       const buffer = new Deno.Buffer()
-   *       const bytesCopied1 = await Deno.copy(Deno.stdout, source);
-   *       const bytesCopied2 = await Deno.copy(buffer, source);
+   *       const bytesCopied1 = await Deno.copy(source, Deno.stdout);
+   *       const bytesCopied2 = await Deno.copy(source, buffer);
    *
-   * Because `copy()` is defined to read from `src` until `EOF`, it does not
-   * treat an `EOF` from `read()` as an error to be reported.
-   *
-   * @param dst The destination to copy to
    * @param src The source to copy from
+   * @param dst The destination to copy to
+   * @param options Can be used to tune size of the buffer. Default size is 32kB
    */
-  export function copy(dst: Writer, src: Reader): Promise<number>;
+  export function copy(
+    src: Reader,
+    dst: Writer,
+    options?: {
+      bufSize?: number;
+    }
+  ): Promise<number>;
 
-  /** **UNSTABLE**: new API, yet to be vetted
-   * Turns a Reader, `r`, into an async iterator.
+  /** Turns a Reader, `r`, into an async iterator.
    *
-   *      let f = await open("/etc/passwd");
-   *      for await (const chunk of iter(f)) {
+   *      let f = await Deno.open("/etc/passwd");
+   *      for await (const chunk of Deno.iter(f)) {
    *        console.log(chunk);
    *      }
    *      f.close();
    *
    * Second argument can be used to tune size of a buffer.
-   * Default size of the buffer is 1024 bytes.
+   * Default size of the buffer is 32kB.
    *
-   *      let f = await open("/etc/passwd");
-   *      for await (const chunk of iter(f, 1024 * 1024)) {
+   *      let f = await Deno.open("/etc/passwd");
+   *      const iter = Deno.iter(f, {
+   *        bufSize: 1024 * 1024
+   *      });
+   *      for await (const chunk of iter) {
    *        console.log(chunk);
    *      }
    *      f.close();
    *
-   * Iterator uses internal buffer of fixed size for efficiency returning
-   * a view on that buffer on each iteration. It it therefore callers
-   * responsibility to copy contents of the buffer if needed; otherwise
+   * Iterator uses an internal buffer of fixed size for efficiency; it returns
+   * a view on that buffer on each iteration. It is therefore caller's
+   * responsibility to copy contents of the buffer if needed; otherwise the
    * next iteration will overwrite contents of previously returned chunk.
    */
   export function iter(
     r: Reader,
-    bufSize?: number
+    options?: {
+      bufSize?: number;
+    }
   ): AsyncIterableIterator<Uint8Array>;
 
-  /** **UNSTABLE**: new API, yet to be vetted
-   * Turns a SyncReader, `r`, into an iterator.
+  /** Turns a ReaderSync, `r`, into an iterator.
    *
-   *      let f = openSync("/etc/passwd");
-   *      for (const chunk of iterSync(reader)) {
+   *      let f = Deno.openSync("/etc/passwd");
+   *      for (const chunk of Deno.iterSync(reader)) {
    *        console.log(chunk);
    *      }
    *      f.close();
    *
    * Second argument can be used to tune size of a buffer.
-   * Default size of the buffer is 1024 bytes.
+   * Default size of the buffer is 32kB.
    *
-   *      let f = openSync("/etc/passwd");
-   *      for (const chunk of iterSync(reader, 1024 * 1024)) {
+   *      let f = await Deno.open("/etc/passwd");
+   *      const iter = Deno.iterSync(f, {
+   *        bufSize: 1024 * 1024
+   *      });
+   *      for (const chunk of iter) {
    *        console.log(chunk);
    *      }
-   *      f.close()
+   *      f.close();
    *
-   * Iterator uses internal buffer of fixed size for efficiency returning
-   * a view on that buffer on each iteration. It it therefore callers
-   * responsibility to copy contents of the buffer if needed; otherwise
+   * Iterator uses an internal buffer of fixed size for efficiency; it returns
+   * a view on that buffer on each iteration. It is therefore caller's
+   * responsibility to copy contents of the buffer if needed; otherwise the
    * next iteration will overwrite contents of previously returned chunk.
    */
   export function iterSync(
-    r: SyncReader,
-    bufSize?: number
+    r: ReaderSync,
+    options?: {
+      bufSize?: number;
+    }
   ): IterableIterator<Uint8Array>;
 
   /** Synchronously open a file and return an instance of `Deno.File`.  The
@@ -645,18 +572,6 @@ declare namespace Deno {
    */
   export function openSync(path: string, options?: OpenOptions): File;
 
-  /** Synchronously open a file and return an instance of `Deno.File`.  The file
-   * may be created depending on the mode passed in.  It is the callers responsibility
-   * to close the file when finished with it.
-   *
-   *       const file = Deno.openSync("/foo/bar.txt", "r");
-   *       // Do work with file
-   *       Deno.close(file.rid);
-   *
-   * Requires `allow-read` and/or `allow-write` permissions depending on openMode.
-   */
-  export function openSync(path: string, openMode?: OpenMode): File;
-
   /** Open a file and resolve to an instance of `Deno.File`.  The
    * file does not need to previously exist if using the `create` or `createNew`
    * open options.  It is the callers responsibility to close the file when finished
@@ -669,18 +584,6 @@ declare namespace Deno {
    * Requires `allow-read` and/or `allow-write` permissions depending on options.
    */
   export function open(path: string, options?: OpenOptions): Promise<File>;
-
-  /** Open a file and resolve to an instance of `Deno.File`.  The file may be
-   * created depending on the mode passed in.  It is the callers responsibility
-   * to close the file when finished with it.
-   *
-   *       const file = await Deno.open("/foo/bar.txt", "w+");
-   *       // Do work with file
-   *       Deno.close(file.rid);
-   *
-   * Requires `allow-read` and/or `allow-write` permissions depending on openMode.
-   */
-  export function open(path: string, openMode?: OpenMode): Promise<File>;
 
   /** Creates a file if none exists or truncates an existing file and returns
    *  an instance of `Deno.File`.
@@ -702,8 +605,11 @@ declare namespace Deno {
 
   /** Synchronously read from a resource ID (`rid`) into an array buffer (`buffer`).
    *
-   * Returns either the number of bytes read during the operation or End Of File
-   * (`Symbol(EOF)`) if there was nothing to read.
+   * Returns either the number of bytes read during the operation or EOF
+   * (`null`) if there was nothing more to read.
+   *
+   * It is possible for a read to successfully return with `0` bytes. This does
+   * not indicate EOF.
    *
    *      // if "/foo/bar.txt" contains the text "hello world":
    *      const file = Deno.openSync("/foo/bar.txt");
@@ -712,12 +618,15 @@ declare namespace Deno {
    *      const text = new TextDecoder().decode(buf);  // "hello world"
    *      Deno.close(file.rid);
    */
-  export function readSync(rid: number, buffer: Uint8Array): number | EOF;
+  export function readSync(rid: number, buffer: Uint8Array): number | null;
 
   /** Read from a resource ID (`rid`) into an array buffer (`buffer`).
    *
-   * Resolves to either the number of bytes read during the operation or End Of
-   * File (`Symbol(EOF)`) if there was nothing to read.
+   * Resolves to either the number of bytes read during the operation or EOF
+   * (`null`) if there was nothing more to read.
+   *
+   * It is possible for a read to successfully return with `0` bytes. This does
+   * not indicate EOF.
    *
    *      // if "/foo/bar.txt" contains the text "hello world":
    *      const file = await Deno.open("/foo/bar.txt");
@@ -726,7 +635,7 @@ declare namespace Deno {
    *      const text = new TextDecoder().decode(buf);  // "hello world"
    *      Deno.close(file.rid);
    */
-  export function read(rid: number, buffer: Uint8Array): Promise<number | EOF>;
+  export function read(rid: number, buffer: Uint8Array): Promise<number | null>;
 
   /** Synchronously write to the resource ID (`rid`) the contents of the array
    * buffer (`data`).
@@ -760,7 +669,7 @@ declare namespace Deno {
    *        const file = Deno.openSync('hello.txt', {read: true, write: true, truncate: true, create: true});
    *        Deno.writeSync(file.rid, new TextEncoder().encode("Hello world"));
    *        // advance cursor 6 bytes
-   *        const cursorPosition = Deno.seekSync(file.rid, 6, Deno.SeekMode.SEEK_START);
+   *        const cursorPosition = Deno.seekSync(file.rid, 6, Deno.SeekMode.Start);
    *        console.log(cursorPosition);  // 6
    *        const buf = new Uint8Array(100);
    *        file.readSync(buf);
@@ -770,11 +679,11 @@ declare namespace Deno {
    *
    *        // Given file.rid pointing to file with "Hello world", which is 11 bytes long:
    *        // Seek 6 bytes from the start of the file
-   *        console.log(Deno.seekSync(file.rid, 6, Deno.SeekMode.SEEK_START)); // "6"
+   *        console.log(Deno.seekSync(file.rid, 6, Deno.SeekMode.Start)); // "6"
    *        // Seek 2 more bytes from the current position
-   *        console.log(Deno.seekSync(file.rid, 2, Deno.SeekMode.SEEK_CURRENT)); // "8"
+   *        console.log(Deno.seekSync(file.rid, 2, Deno.SeekMode.Current)); // "8"
    *        // Seek backwards 2 bytes from the end of the file
-   *        console.log(Deno.seekSync(file.rid, -2, Deno.SeekMode.SEEK_END)); // "9" (e.g. 11-2)
+   *        console.log(Deno.seekSync(file.rid, -2, Deno.SeekMode.End)); // "9" (e.g. 11-2)
    */
   export function seekSync(
     rid: number,
@@ -788,7 +697,7 @@ declare namespace Deno {
    *        const file = await Deno.open('hello.txt', {read: true, write: true, truncate: true, create: true});
    *        await Deno.write(file.rid, new TextEncoder().encode("Hello world"));
    *        // advance cursor 6 bytes
-   *        const cursorPosition = await Deno.seek(file.rid, 6, Deno.SeekMode.SEEK_START);
+   *        const cursorPosition = await Deno.seek(file.rid, 6, Deno.SeekMode.Start);
    *        console.log(cursorPosition);  // 6
    *        const buf = new Uint8Array(100);
    *        await file.read(buf);
@@ -798,11 +707,11 @@ declare namespace Deno {
    *
    *        // Given file.rid pointing to file with "Hello world", which is 11 bytes long:
    *        // Seek 6 bytes from the start of the file
-   *        console.log(await Deno.seek(file.rid, 6, Deno.SeekMode.SEEK_START)); // "6"
+   *        console.log(await Deno.seek(file.rid, 6, Deno.SeekMode.Start)); // "6"
    *        // Seek 2 more bytes from the current position
-   *        console.log(await Deno.seek(file.rid, 2, Deno.SeekMode.SEEK_CURRENT)); // "8"
+   *        console.log(await Deno.seek(file.rid, 2, Deno.SeekMode.Current)); // "8"
    *        // Seek backwards 2 bytes from the end of the file
-   *        console.log(await Deno.seek(file.rid, -2, Deno.SeekMode.SEEK_END)); // "9" (e.g. 11-2)
+   *        console.log(await Deno.seek(file.rid, -2, Deno.SeekMode.End)); // "9" (e.g. 11-2)
    */
   export function seek(
     rid: number,
@@ -824,29 +733,29 @@ declare namespace Deno {
   export class File
     implements
       Reader,
-      SyncReader,
+      ReaderSync,
       Writer,
-      SyncWriter,
+      WriterSync,
       Seeker,
-      SyncSeeker,
+      SeekerSync,
       Closer {
     readonly rid: number;
     constructor(rid: number);
     write(p: Uint8Array): Promise<number>;
     writeSync(p: Uint8Array): number;
-    read(p: Uint8Array): Promise<number | EOF>;
-    readSync(p: Uint8Array): number | EOF;
+    read(p: Uint8Array): Promise<number | null>;
+    readSync(p: Uint8Array): number | null;
     seek(offset: number, whence: SeekMode): Promise<number>;
     seekSync(offset: number, whence: SeekMode): number;
     close(): void;
   }
 
-  /** An instance of `Deno.File` for `stdin`. */
-  export const stdin: File;
-  /** An instance of `Deno.File` for `stdout`. */
-  export const stdout: File;
-  /** An instance of `Deno.File` for `stderr`. */
-  export const stderr: File;
+  /** A handle for `stdin`. */
+  export const stdin: Reader & ReaderSync & Closer & { rid: number };
+  /** A handle for `stdout`. */
+  export const stdout: Writer & WriterSync & Closer & { rid: number };
+  /** A handle for `stderr`. */
+  export const stderr: Writer & WriterSync & Closer & { rid: number };
 
   export interface OpenOptions {
     /** Sets the option for read access. This option, when `true`, means that the
@@ -882,22 +791,7 @@ declare namespace Deno {
     mode?: number;
   }
 
-  /** A set of string literals which specify how to open a file.
-   *
-   * |Value |Description                                                                                       |
-   * |------|--------------------------------------------------------------------------------------------------|
-   * |`"r"` |Read-only. Default. Starts at beginning of file.                                                  |
-   * |`"r+"`|Read-write. Start at beginning of file.                                                           |
-   * |`"w"` |Write-only. Opens and truncates existing file or creates new one for writing only.                |
-   * |`"w+"`|Read-write. Opens and truncates existing file or creates new one for writing and reading.         |
-   * |`"a"` |Write-only. Opens existing file or creates new one. Each write appends content to the end of file.|
-   * |`"a+"`|Read-write. Behaves like `"a"` and allows to read from file.                                      |
-   * |`"x"` |Write-only. Exclusive create - creates new file only if one doesn't exist already.                |
-   * |`"x+"`|Read-write. Behaves like `x` and allows reading from file.                                        |
-   */
-  export type OpenMode = "r" | "r+" | "w" | "w+" | "a" | "a+" | "x" | "x+";
-
-  /** **UNSTABLE**: new API, yet to be vetted
+  /**
    *
    *  Check if a given resource id (`rid`) is a TTY.
    *
@@ -937,7 +831,7 @@ declare namespace Deno {
    * of ArrayBuffer.
    *
    * Based on [Go Buffer](https://golang.org/pkg/bytes/#Buffer). */
-  export class Buffer implements Reader, SyncReader, Writer, SyncWriter {
+  export class Buffer implements Reader, ReaderSync, Writer, WriterSync {
     constructor(ab?: ArrayBuffer);
     /** Returns a slice holding the unread portion of the buffer.
      *
@@ -969,12 +863,12 @@ declare namespace Deno {
     reset(): void;
     /** Reads the next `p.length` bytes from the buffer or until the buffer is
      * drained. Returns the number of bytes read. If the buffer has no data to
-     * return, the return is `Deno.EOF`. */
-    readSync(p: Uint8Array): number | EOF;
+     * return, the return is EOF (`null`). */
+    readSync(p: Uint8Array): number | null;
     /** Reads the next `p.length` bytes from the buffer or until the buffer is
      * drained. Resolves to the number of bytes read. If the buffer has no
-     * data to return, resolves to `Deno.EOF`. */
-    read(p: Uint8Array): Promise<number | EOF>;
+     * data to return, resolves to EOF (`null`). */
+    read(p: Uint8Array): Promise<number | null>;
     writeSync(p: Uint8Array): number;
     write(p: Uint8Array): Promise<number>;
     /** Grows the buffer's capacity, if necessary, to guarantee space for
@@ -985,24 +879,24 @@ declare namespace Deno {
      * Based on Go Lang's
      * [Buffer.Grow](https://golang.org/pkg/bytes/#Buffer.Grow). */
     grow(n: number): void;
-    /** Reads data from `r` until `Deno.EOF` and appends it to the buffer,
+    /** Reads data from `r` until EOF (`null`) and appends it to the buffer,
      * growing the buffer as needed. It resolves to the number of bytes read.
      * If the buffer becomes too large, `.readFrom()` will reject with an error.
      *
      * Based on Go Lang's
      * [Buffer.ReadFrom](https://golang.org/pkg/bytes/#Buffer.ReadFrom). */
     readFrom(r: Reader): Promise<number>;
-    /** Reads data from `r` until `Deno.EOF` and appends it to the buffer,
+    /** Reads data from `r` until EOF (`null`) and appends it to the buffer,
      * growing the buffer as needed. It returns the number of bytes read. If the
      * buffer becomes too large, `.readFromSync()` will throw an error.
      *
      * Based on Go Lang's
      * [Buffer.ReadFrom](https://golang.org/pkg/bytes/#Buffer.ReadFrom). */
-    readFromSync(r: SyncReader): number;
+    readFromSync(r: ReaderSync): number;
   }
 
-  /** Read Reader `r` until end of file (`Deno.EOF`) and resolve to the content
-   * as `Uint8Array`.
+  /** Read Reader `r` until EOF (`null`) and resolve to the content as
+   * Uint8Array`.
    *
    *       // Example from stdin
    *       const stdinContent = await Deno.readAll(Deno.stdin);
@@ -1020,8 +914,8 @@ declare namespace Deno {
    */
   export function readAll(r: Reader): Promise<Uint8Array>;
 
-  /** Synchronously reads Reader `r` until end of file (`Deno.EOF`) and returns
-   * the content as `Uint8Array`.
+  /** Synchronously reads Reader `r` until EOF (`null`) and returns the content
+   * as `Uint8Array`.
    *
    *       // Example from stdin
    *       const stdinContent = Deno.readAllSync(Deno.stdin);
@@ -1037,7 +931,7 @@ declare namespace Deno {
    *       const reader = new Deno.Buffer(myData.buffer as ArrayBuffer);
    *       const bufferContent = Deno.readAllSync(reader);
    */
-  export function readAllSync(r: SyncReader): Uint8Array;
+  export function readAllSync(r: ReaderSync): Uint8Array;
 
   /** Write all the content of the array buffer (`arr`) to the writer (`w`).
    *
@@ -1078,7 +972,7 @@ declare namespace Deno {
    *       Deno.writeAllSync(writer, contentBytes);
    *       console.log(writer.bytes().length);  // 11
    */
-  export function writeAllSync(w: SyncWriter, arr: Uint8Array): void;
+  export function writeAllSync(w: WriterSync, arr: Uint8Array): void;
 
   export interface MkdirOptions {
     /** Defaults to `false`. If set to `true`, means that any intermediate
@@ -1356,6 +1250,25 @@ declare namespace Deno {
    * Requires `allow-read` and `allow-write` permission. */
   export function rename(oldpath: string, newpath: string): Promise<void>;
 
+  /** Synchronously reads and returns the entire contents of a file as utf8 encoded string
+   *  encoded string. Reading a directory returns an empty string.
+   *
+   *       const data = Deno.readTextFileSync("hello.txt");
+   *       console.log(data);
+   *
+   * Requires `allow-read` permission. */
+  export function readTextFileSync(path: string): string;
+
+  /** Asynchronously reads and returns the entire contents of a file as a utf8
+   *  encoded string. Reading a directory returns an empty data array.
+   *
+   *       const decoder = new TextDecoder("utf-8");
+   *       const data = Deno.readFileSync("hello.txt");
+   *       console.log(decoder.decode(data));
+   *
+   * Requires `allow-read` permission. */
+  export function readTextFile(path: string): Promise<string>;
+
   /** Synchronously reads and returns the entire contents of a file as an array
    * of bytes. `TextDecoder` can be used to transform the bytes to string if
    * required.  Reading a directory returns an empty data array.
@@ -1395,15 +1308,15 @@ declare namespace Deno {
     /** The last modification time of the file. This corresponds to the `mtime`
      * field from `stat` on Linux/Mac OS and `ftLastWriteTime` on Windows. This
      * may not be available on all platforms. */
-    modified: number | null;
+    mtime: Date | null;
     /** The last access time of the file. This corresponds to the `atime`
      * field from `stat` on Unix and `ftLastAccessTime` on Windows. This may not
      * be available on all platforms. */
-    accessed: number | null;
+    atime: Date | null;
     /** The creation time of the file. This corresponds to the `birthtime`
-     * field from `stat` on Mac/BSD and `ftCreationTime` on Windows. This may not
-     * be available on all platforms. */
-    created: number | null;
+     * field from `stat` on Mac/BSD and `ftCreationTime` on Windows. This may
+     * not be available on all platforms. */
+    birthtime: Date | null;
     /** ID of the device containing the file.
      *
      * _Linux/Mac OS only._ */
@@ -1582,12 +1495,16 @@ declare namespace Deno {
 
   /** Creates `newpath` as a hard link to `oldpath`.
    *
+   *  **UNSTABLE**: needs security review.
+   *
    *       await Deno.link("old/name", "new/name");
    *
    * Requires `allow-read` and `allow-write` permissions. */
   export function link(oldpath: string, newpath: string): Promise<void>;
 
   /** **UNSTABLE**: `type` argument type may be changed to `"dir" | "file"`.
+   *
+   *  **UNSTABLE**: needs security review.
    *
    * Creates `newpath` as a symbolic link to `oldpath`.
    *
@@ -1606,6 +1523,8 @@ declare namespace Deno {
   ): void;
 
   /** **UNSTABLE**: `type` argument may be changed to `"dir" | "file"`
+   *
+   *  **UNSTABLE**: needs security review.
    *
    * Creates `newpath` as a symbolic link to `oldpath`.
    *
@@ -1672,6 +1591,24 @@ declare namespace Deno {
     options?: WriteFileOptions
   ): Promise<void>;
 
+  /** Synchronously write string `data` to the given `path`, by default creating a new file if needed,
+   * else overwriting.
+   *
+   *       await Deno.writeTextFileSync("hello1.txt", "Hello world\n");  // overwrite "hello1.txt" or create it
+   *
+   * Requires `allow-write` permission, and `allow-read` if `options.create` is `false`.
+   */
+  export function writeTextFileSync(path: string, data: string): void;
+
+  /** Asynchronously write string `data` to the given `path`, by default creating a new file if needed,
+   * else overwriting.
+   *
+   *       await Deno.writeTextFile("hello1.txt", "Hello world\n");  // overwrite "hello1.txt" or create it
+   *
+   * Requires `allow-write` permission, and `allow-read` if `options.create` is `false`.
+   */
+  export function writeTextFile(path: string, data: string): Promise<void>;
+
   /** **UNSTABLE**: Should not have same name as `window.location` type. */
   interface Location {
     /** The full url for the module, e.g. `file://some/file.ts` or
@@ -1730,11 +1667,12 @@ declare namespace Deno {
     Busy: ErrorConstructor;
   };
 
-  /** **UNSTABLE**: potentially want names to overlap more with browser.
+  /** The name of a "powerful feature" which needs permission.
    *
-   * The permissions as granted by the caller.
+   * See: https://w3c.github.io/permissions/#permission-registry
    *
-   * See: https://w3c.github.io/permissions/#permission-registry */
+   * Note that the definition of `PermissionName` in the above spec is swapped
+   * out for a set of Deno permissions which are not web-compatible. */
   export type PermissionName =
     | "run"
     | "read"
@@ -1749,39 +1687,45 @@ declare namespace Deno {
    * See: https://w3c.github.io/permissions/#status-of-a-permission */
   export type PermissionState = "granted" | "denied" | "prompt";
 
-  interface RunPermissionDescriptor {
+  export interface RunPermissionDescriptor {
     name: "run";
   }
 
-  interface ReadWritePermissionDescriptor {
-    name: "read" | "write";
+  export interface ReadPermissionDescriptor {
+    name: "read";
     path?: string;
   }
 
-  interface NetPermissionDescriptor {
+  export interface WritePermissionDescriptor {
+    name: "write";
+    path?: string;
+  }
+
+  export interface NetPermissionDescriptor {
     name: "net";
     url?: string;
   }
 
-  interface EnvPermissionDescriptor {
+  export interface EnvPermissionDescriptor {
     name: "env";
   }
 
-  interface PluginPermissionDescriptor {
+  export interface PluginPermissionDescriptor {
     name: "plugin";
   }
 
-  interface HrtimePermissionDescriptor {
+  export interface HrtimePermissionDescriptor {
     name: "hrtime";
   }
 
-  /** Permission descriptors which define a permission which can be queried,
+  /** Permission descriptors which define a permission and can be queried,
    * requested, or revoked.
    *
    * See: https://w3c.github.io/permissions/#permission-descriptor */
-  type PermissionDescriptor =
+  export type PermissionDescriptor =
     | RunPermissionDescriptor
-    | ReadWritePermissionDescriptor
+    | ReadPermissionDescriptor
+    | WritePermissionDescriptor
     | NetPermissionDescriptor
     | EnvPermissionDescriptor
     | PluginPermissionDescriptor
@@ -1816,7 +1760,9 @@ declare namespace Deno {
     request(desc: PermissionDescriptor): Promise<PermissionStatus>;
   }
 
-  /** **UNSTABLE**: maybe move to `navigator.permissions` to match web API. */
+  /** **UNSTABLE**: maybe move to `navigator.permissions` to match web API. It
+   * could look like `navigator.permissions.query({ name: Deno.symbols.read })`.
+   */
   export const permissions: Permissions;
 
   /** see: https://w3c.github.io/permissions/#permissionstatus */
@@ -1883,7 +1829,7 @@ declare namespace Deno {
 
   export interface UnixAddr {
     transport: "unix" | "unixpacket";
-    address: string;
+    path: string;
   }
 
   export type Addr = NetAddr | UnixAddr;
@@ -1909,7 +1855,7 @@ declare namespace Deno {
    *       const conn = await listener.accept();
    *       Deno.shutdown(conn.rid, Deno.ShutdownMode.Write);
    */
-  export function shutdown(rid: number, how: ShutdownMode): void;
+  export function shutdown(rid: number, how: ShutdownMode): Promise<void>;
 
   /** **UNSTABLE**: new API, yet to be vetted.
    *
@@ -1953,11 +1899,12 @@ declare namespace Deno {
     readonly remoteAddr: Addr;
     /** The resource ID of the connection. */
     readonly rid: number;
-    /** Shuts down (`shutdown(2)`) the reading side of the TCP connection. Most
-     * callers should just use `close()`. */
-    closeRead(): void;
     /** Shuts down (`shutdown(2)`) the writing side of the TCP connection. Most
-     * callers should just use `close()`. */
+     * callers should just use `close()`.
+     *
+     * **Unstable** because of lack of testing and because Deno.shutdown is also
+     * unstable.
+     * */
     closeWrite(): void;
   }
 
@@ -1971,11 +1918,9 @@ declare namespace Deno {
 
   export interface UnixListenOptions {
     /** A Path to the Unix Socket. */
-    address: string;
+    path: string;
   }
-  /** **UNSTABLE**: new API, yet to be vetted.
-   *
-   * Listen announces on the local transport address.
+  /** Listen announces on the local transport address.
    *
    *      const listener1 = Deno.listen({ port: 80 })
    *      const listener2 = Deno.listen({ hostname: "192.0.2.1", port: 80 })
@@ -1986,39 +1931,49 @@ declare namespace Deno {
   export function listen(
     options: ListenOptions & { transport?: "tcp" }
   ): Listener;
-  /** **UNSTABLE**: new API, yet to be vetted.
+  /** Listen announces on the local transport address.
    *
-   * Listen announces on the local transport address.
+   *     const listener = Deno.listen({ path: "/foo/bar.sock", transport: "unix" })
    *
-   *     const listener = Deno.listen({ address: "/foo/bar.sock", transport: "unix" })
-   *
-   * Requires `allow-read` permission. */
+   * Requires `allow-read` and `allow-write` permission. */
   export function listen(
     options: UnixListenOptions & { transport: "unix" }
   ): Listener;
-  /** **UNSTABLE**: new API, yet to be vetted.
+
+  /** **UNSTABLE**: new API
    *
    * Listen announces on the local transport address.
    *
-   *      const listener1 = Deno.listen({ port: 80, transport: "udp" })
-   *      const listener2 = Deno.listen({ hostname: "golang.org", port: 80, transport: "udp" });
+   *      const listener1 = Deno.listenDatagram({
+   *        port: 80,
+   *        transport: "udp"
+   *      });
+   *      const listener2 = Deno.listenDatagram({
+   *        hostname: "golang.org",
+   *        port: 80,
+   *        transport: "udp"
+   *      });
    *
    * Requires `allow-net` permission. */
-  export function listen(
+  export function listenDatagram(
     options: ListenOptions & { transport: "udp" }
   ): DatagramConn;
-  /** **UNSTABLE**: new API, yet to be vetted.
+
+  /** **UNSTABLE**: new API
    *
    * Listen announces on the local transport address.
    *
-   *     const listener = Deno.listen({ address: "/foo/bar.sock", transport: "unixpacket" })
+   *     const listener = Deno.listenDatagram({
+   *       address: "/foo/bar.sock",
+   *       transport: "unixpacket"
+   *     });
    *
-   * Requires `allow-read` permission. */
-  export function listen(
+   * Requires `allow-read` and `allow-write` permission. */
+  export function listenDatagram(
     options: UnixListenOptions & { transport: "unixpacket" }
   ): DatagramConn;
 
-  export interface ListenTLSOptions extends ListenOptions {
+  export interface ListenTlsOptions extends ListenOptions {
     /** Server certificate file. */
     certFile: string;
     /** Server public key file. */
@@ -2030,10 +1985,10 @@ declare namespace Deno {
   /** Listen announces on the local transport address over TLS (transport layer
    * security).
    *
-   *      const lstnr = Deno.listenTLS({ port: 443, certFile: "./server.crt", keyFile: "./server.key" });
+   *      const lstnr = Deno.listenTls({ port: 443, certFile: "./server.crt", keyFile: "./server.key" });
    *
    * Requires `allow-net` permission. */
-  export function listenTLS(options: ListenTLSOptions): Listener;
+  export function listenTls(options: ListenTlsOptions): Listener;
 
   export interface ConnectOptions {
     /** The port to connect to. */
@@ -2046,7 +2001,7 @@ declare namespace Deno {
 
   export interface UnixConnectOptions {
     transport: "unix";
-    address: string;
+    path: string;
   }
 
   /**
@@ -2057,14 +2012,14 @@ declare namespace Deno {
    *     const conn2 = await Deno.connect({ hostname: "192.0.2.1", port: 80 });
    *     const conn3 = await Deno.connect({ hostname: "[2001:db8::1]", port: 80 });
    *     const conn4 = await Deno.connect({ hostname: "golang.org", port: 80, transport: "tcp" });
-   *     const conn5 = await Deno.connect({ address: "/foo/bar.sock", transport: "unix" });
+   *     const conn5 = await Deno.connect({ path: "/foo/bar.sock", transport: "unix" });
    *
    * Requires `allow-net` permission for "tcp" and `allow-read` for unix. */
   export function connect(
     options: ConnectOptions | UnixConnectOptions
   ): Promise<Conn>;
 
-  export interface ConnectTLSOptions {
+  export interface ConnectTlsOptions {
     /** The port to connect to. */
     port: number;
     /** A literal IP address or host name that can be resolved to an IP address.
@@ -2079,16 +2034,16 @@ declare namespace Deno {
    * cert file is optional and if not included Mozilla's root certificates will
    * be used (see also https://github.com/ctz/webpki-roots for specifics)
    *
-   *     const conn1 = await Deno.connectTLS({ port: 80 });
-   *     const conn2 = await Deno.connectTLS({ certFile: "./certs/my_custom_root_CA.pem", hostname: "192.0.2.1", port: 80 });
-   *     const conn3 = await Deno.connectTLS({ hostname: "[2001:db8::1]", port: 80 });
-   *     const conn4 = await Deno.connectTLS({ certFile: "./certs/my_custom_root_CA.pem", hostname: "golang.org", port: 80});
+   *     const conn1 = await Deno.connectTls({ port: 80 });
+   *     const conn2 = await Deno.connectTls({ certFile: "./certs/my_custom_root_CA.pem", hostname: "192.0.2.1", port: 80 });
+   *     const conn3 = await Deno.connectTls({ hostname: "[2001:db8::1]", port: 80 });
+   *     const conn4 = await Deno.connectTls({ certFile: "./certs/my_custom_root_CA.pem", hostname: "golang.org", port: 80});
    *
    * Requires `allow-net` permission.
    */
-  export function connectTLS(options: ConnectTLSOptions): Promise<Conn>;
+  export function connectTls(options: ConnectTlsOptions): Promise<Conn>;
 
-  export interface StartTLSOptions {
+  export interface StartTlsOptions {
     /** A literal IP address or host name that can be resolved to an IP address.
      * If not specified, defaults to `127.0.0.1`. */
     hostname?: string;
@@ -2106,16 +2061,15 @@ declare namespace Deno {
    * prepared for TLS handshake.
    *
    *     const conn = await Deno.connect({ port: 80, hostname: "127.0.0.1" });
-   *     const tlsConn = await Deno.startTLS(conn, { certFile: "./certs/my_custom_root_CA.pem", hostname: "127.0.0.1", port: 80 });
+   *     const tlsConn = await Deno.startTls(conn, { certFile: "./certs/my_custom_root_CA.pem", hostname: "127.0.0.1", port: 80 });
    *
    * Requires `allow-net` permission.
    */
-  export function startTLS(
+  export function startTls(
     conn: Conn,
-    options?: StartTLSOptions
+    options?: StartTlsOptions
   ): Promise<Conn>;
 
-  /** **UNSTABLE**: not sure if broken or not */
   export interface Metrics {
     opsDispatched: number;
     opsDispatchedSync: number;
@@ -2153,31 +2107,29 @@ declare namespace Deno {
    */
   export function metrics(): Metrics;
 
-  /** **UNSTABLE**: reconsider representation. */
   interface ResourceMap {
-    [rid: number]: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [rid: number]: any;
   }
 
-  /** **UNSTABLE**: The return type is under consideration and may change.
+  /** Returns a map of open resource ids (rid) along with their string
+   * representations. This is an internal API and as such resource
+   * representation has `any` type; that means it can change any time.
    *
-   * Returns a map of open _file like_ resource ids (rid) along with their string
-   * representations.
-   *
-   *       console.log(Deno.resources()); // e.g. { 0: "stdin", 1: "stdout", 2: "stderr" }
+   *       console.log(Deno.resources());
+   *       // { 0: "stdin", 1: "stdout", 2: "stderr" }
    *       Deno.openSync('../test.file');
-   *       console.log(Deno.resources()); // e.g. { 0: "stdin", 1: "stdout", 2: "stderr", 3: "fsFile" }
+   *       console.log(Deno.resources());
+   *       // { 0: "stdin", 1: "stdout", 2: "stderr", 3: "fsFile" }
    */
   export function resources(): ResourceMap;
 
-  /** **UNSTABLE**: new API. Needs docs. */
   export interface FsEvent {
     kind: "any" | "access" | "create" | "modify" | "remove";
     paths: string[];
   }
 
-  /** **UNSTABLE**: new API, yet to be vetted.
-   *
-   * Watch for file system events against one or more `paths`, which can be files
+  /** Watch for file system events against one or more `paths`, which can be files
    * or directories.  These paths must exist already.  One user action (e.g.
    * `touch test.file`) can  generate multiple file system events.  Likewise,
    * one user action can result in multiple file paths in one event (e.g. `mv
@@ -2185,14 +2137,15 @@ declare namespace Deno {
    * for directories, will watch the specified directory and all sub directories.
    * Note that the exact ordering of the events can vary between operating systems.
    *
-   *       const iter = Deno.fsEvents("/");
-   *       for await (const event of iter) {
-   *          console.log(">>>> event", event);  // e.g. { kind: "create", paths: [ "/foo.txt" ] }
+   *       const watcher = Deno.watchFs("/");
+   *       for await (const event of watcher) {
+   *          console.log(">>>> event", event);
+   *          // { kind: "create", paths: [ "/foo.txt" ] }
    *       }
    *
    * Requires `allow-read` permission.
    */
-  export function fsEvents(
+  export function watchFs(
     paths: string | string[],
     options?: { recursive: boolean }
   ): AsyncIterableIterator<FsEvent>;
@@ -2234,24 +2187,31 @@ declare namespace Deno {
   export class Process {
     readonly rid: number;
     readonly pid: number;
-    readonly stdin?: WriteCloser;
-    readonly stdout?: ReadCloser;
-    readonly stderr?: ReadCloser;
+    readonly stdin?: Writer & Closer;
+    readonly stdout?: Reader & Closer;
+    readonly stderr?: Reader & Closer;
     /** Resolves to the current status of the process. */
     status(): Promise<ProcessStatus>;
-    /** Buffer the stdout and return it as `Uint8Array` after `Deno.EOF`.
+    /** Buffer the stdout until EOF and return it as `Uint8Array`.
      *
      * You must set stdout to `"piped"` when creating the process.
      *
      * This calls `close()` on stdout after its done. */
     output(): Promise<Uint8Array>;
-    /** Buffer the stderr and return it as `Uint8Array` after `Deno.EOF`.
+    /** Buffer the stderr until EOF and return it as `Uint8Array`.
      *
      * You must set stderr to `"piped"` when creating the process.
      *
      * This calls `close()` on stderr after its done. */
     stderrOutput(): Promise<Uint8Array>;
     close(): void;
+
+    /** **UNSTABLE**: The `signo` argument may change to require the Deno.Signal
+     * enum.
+     *
+     * Send a signal to process. This functionality currently only works on
+     * Linux and Mac OS.
+     */
     kill(signo: number): void;
   }
 
@@ -2267,8 +2227,6 @@ declare namespace Deno {
         signal?: number;
       };
 
-  /** **UNSTABLE**: `args` has been recently renamed to `cmd` to differentiate from
-   * `Deno.args`. */
   export interface RunOptions {
     /** Arguments to pass. Note, the first element needs to be a path to the
      * binary */
@@ -2377,16 +2335,10 @@ declare namespace Deno {
   export const Signal: typeof MacOSSignal | typeof LinuxSignal;
 
   interface InspectOptions {
-    showHidden?: boolean;
     depth?: number;
-    colors?: boolean;
-    indentLevel?: number;
   }
 
-  /** **UNSTABLE**: The exact form of the string output is under consideration
-   * and may change.
-   *
-   * Converts the input into a string that has the same format as printed by
+  /** Converts the input into a string that has the same format as printed by
    * `console.log()`.
    *
    *      const obj = {};
@@ -2401,7 +2353,7 @@ declare namespace Deno {
    *      class A {
    *        x = 10;
    *        y = "hello";
-   *        [Deno.symbols.customInspect](): string {
+   *        [Deno.customInspect](): string {
    *          return "x=" + this.x + ", y=" + this.y;
    *        }
    *      }
@@ -2416,19 +2368,19 @@ declare namespace Deno {
    */
   export function inspect(value: unknown, options?: InspectOptions): string;
 
-  export type OperatingSystem = "mac" | "win" | "linux";
-
-  export type Arch = "x64" | "arm64";
-
-  interface BuildInfo {
-    /** The CPU architecture. */
-    arch: Arch;
-    /** The operating system. */
-    os: OperatingSystem;
-  }
-
   /** Build related information. */
-  export const build: BuildInfo;
+  export const build: {
+    /** The LLVM target triple */
+    target: string;
+    /** Instruction set architecture */
+    arch: "x86_64";
+    /** Operating system */
+    os: "darwin" | "linux" | "windows";
+    /** Computer vendor */
+    vendor: string;
+    /** Optional environment */
+    env?: string;
+  };
 
   interface Version {
     deno: string;
@@ -2923,16 +2875,8 @@ declare namespace Deno {
     windowChange: () => SignalStream;
   };
 
-  /** **UNSTABLE**: new API. Maybe move `Deno.EOF` here.
-   *
-   * Special Deno related symbols. */
-  export const symbols: {
-    /** Symbol to access exposed internal Deno API */
-    readonly internal: unique symbol;
-    /** A symbol which can be used as a key for a custom method which will be
-     * called when `Deno.inspect()` is called, or when the object is logged to
-     * the console. */
-    readonly customInspect: unique symbol;
-    // TODO(ry) move EOF here?
-  };
+  /** A symbol which can be used as a key for a custom method which will be
+   * called when `Deno.inspect()` is called, or when the object is logged to
+   * the console. */
+  export const customInspect: unique symbol;
 }
