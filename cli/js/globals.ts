@@ -206,9 +206,11 @@ export const windowOrWorkerGlobalScopeMethods = {
   setTimeout: writable(timers.setTimeout),
 };
 
+const hasInspector: boolean | undefined = (globalThis as any).__hasInspector;
+
 // Other properties shared between WindowScope and WorkerGlobalScope
 export const windowOrWorkerGlobalScopeProperties = {
-  console: writable(new consoleTypes.Console(core.print)),
+  console: writable(hasInspector ? globalThis.console : new consoleTypes.Console(core.print)),
   AbortController: nonEnumerable(abortController.AbortControllerImpl),
   AbortSignal: nonEnumerable(abortSignal.AbortSignalImpl),
   Blob: nonEnumerable(blob.DenoBlob),

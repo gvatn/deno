@@ -121,7 +121,7 @@ impl Worker {
 
     let (internal_channels, external_channels) = create_channels();
 
-    Self {
+    let mut worker = Self {
       name,
       isolate,
       state,
@@ -129,7 +129,15 @@ impl Worker {
       internal_channels,
       external_channels,
       inspector,
+    };
+
+    // Through bindings::initialize_context, Deno.core is assumed established
+    // todo: How to communicate this information
+    if worker.inspector.is_some() {
+      worker.execute("globalThis[\"__hasInspector\"] = true;").expect("Could not set __hasInspector");
     }
+
+    worker
   }
 
   /// Same as execute2() but the filename defaults to "$CWD/__anonymous__".

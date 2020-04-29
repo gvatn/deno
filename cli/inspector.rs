@@ -292,6 +292,22 @@ impl v8::inspector::V8InspectorClientImpl for DenoInspector {
     assert_eq!(context_group_id, DenoInspectorSession::CONTEXT_GROUP_ID);
     self.flags.borrow_mut().session_handshake_done = true;
   }
+  fn console_api_message(
+    &mut self,
+    _context_group_id: i32,
+    _level: i32,
+    _message: &v8::inspector::StringView,
+    _url: &v8::inspector::StringView,
+    line_number: u32,
+    column_number: u32,
+    _stack_trace: &mut v8::inspector::V8StackTrace,
+  ) {
+    use std::fs::OpenOptions;
+    let mut file = OpenOptions::new().append(true).open("/home/gudmund/test-inspector.txt").unwrap();
+    use std::io::Write;
+    file.write(&format!("{} {}: {}", line_number, column_number, _message).as_bytes()).unwrap();
+    //panic!("Got console api message");
+  }
 }
 
 /// DenoInspector implements a Future so that it can poll for new incoming

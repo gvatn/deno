@@ -131,7 +131,7 @@ impl EsIsolate {
     let mut cs = v8::ContextScope::new(scope, context);
     let scope = cs.enter();
 
-    //println!("{} - {:?}:\n{}", name, real_file.as_ref(), source);
+    println!("{} - {:?}:\n{}", name, real_file.as_ref(), source);
     //let name_str = v8::String::new(scope, name).unwrap();
     let name_str = v8::String::new(scope, &format!("file://{}", &real_file.as_ref().as_os_str().to_string_lossy())).unwrap();
     let source_str = v8::String::new(scope, source).unwrap();

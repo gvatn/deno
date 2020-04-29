@@ -157,6 +157,8 @@ pub fn compile_bundle(
       "outFile": bundle_filename,
       "removeComments": true,
       "sourceMap": true,
+      "inlineSourceMap": false,
+      "inlineSources": false,
       "strict": true,
       "target": "esnext",
       "typeRoots" : ["$typeRoots$"],
